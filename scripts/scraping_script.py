@@ -3,15 +3,12 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import json
-import pandas as pd
 import concurrent.futures
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from datetime import datetime
+import pandas as pd
 
 # Defining functions
 
-# Functions for scraping appartments
+# Functions for scraping apartments
 
 def fetch_links_from_page_apartment(counter):
     headers = {
@@ -24,23 +21,22 @@ def fetch_links_from_page_apartment(counter):
     page_links = [elem['href'] for elem in soup.find_all('a', href=True) if 'classified/apartment/' in elem['href']]
     return page_links
 
-# Retreive links of all the appartments from a page
-def retreive_apartment_links():
-    appartements_url = []
+# Retrieve links of all the apartments from a page
+def retrieve_apartment_links():
+    apartments_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(fetch_links_from_page_apartment, counter) for counter in range(1, 3)]        # CHANGE FOR THE NUMBER OF PAGES
+        futures = [executor.submit(fetch_links_from_page_apartment, counter) for counter in range(1, 2)]  # CHANGE FOR THE NUMBER OF PAGES
         for future in concurrent.futures.as_completed(futures):
             try:
                 page_links = future.result()
-                appartements_url.extend(page_links)
+                apartments_url.extend(page_links)
             except Exception as exc:
                 print(f'Generated an exception: {exc}')
     
-    return appartements_url
-
+    return apartments_url
 
 # Function for scraping apartment info from links
-def retreive_apartment_info(url):
+def retrieve_apartment_info(url):
     # Fetch the page content using requests
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
@@ -137,35 +133,27 @@ def retreive_apartment_info(url):
         data_dict, "property", "land", "surface"
     )
     return classified_dict
+
 # Function to make it faster with threading
 def scraping_apartment():
-    apartement_data = []
-    url = retreive_apartment_links()
+    apartment_data = []
+    url = retrieve_apartment_links()
     
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_url = {executor.submit(retreive_apartment_info, link): link for link in url}
+        future_to_url = {executor.submit(retrieve_apartment_info, link): link for link in url}
         for future in concurrent.futures.as_completed(future_to_url):
             try:
                 data = future.result()
-                apartement_data.append(data)
+                if data:  # Ensure data is not None
+                    apartment_data.append(data)
             except Exception as exc:
                 print(f'Generated an exception: {exc}')
     
-    return apartement_data
-
-# Function to save the data in a csv file apartment
-def save_csv_apartement(classified_dict):
-    df = pd.DataFrame(
-        classified_dict
-    )  # Convert the list of dictionaries into a DataFrame
-    df.to_csv("data_immo_eliza_apartment.csv", index=False)
-    print("Data saved as data_immo_eliza_apartment.csv")
-    return "data_immo_eliza_apartment.csv"
-
+    return apartment_data
 
 # Functions to scrape houses
 
-# Functions for retreiving links for houses
+# Functions for retrieving links for houses
 def fetch_links_from_page_house(counter):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
@@ -177,23 +165,22 @@ def fetch_links_from_page_house(counter):
     page_links = [elem['href'] for elem in soup.find_all('a', href=True) if 'classified/house/' in elem['href']]
     return page_links
 
-# Retreive links of all the houses from a page
-def retreive_house_links():
-    appartements_url = []
+# Retrieve links of all the houses from a page
+def retrieve_house_links():
+    houses_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(fetch_links_from_page_house, counter) for counter in range(1, 3)]        # CHANGE FOR THE NUMBER OF PAGES
+        futures = [executor.submit(fetch_links_from_page_house, counter) for counter in range(1, 2)]  # CHANGE FOR THE NUMBER OF PAGES
         for future in concurrent.futures.as_completed(futures):
             try:
                 page_links = future.result()
-                appartements_url.extend(page_links)
+                houses_url.extend(page_links)
             except Exception as exc:
                 print(f'Generated an exception: {exc}')
     
-    return appartements_url
-
+    return houses_url
 
 # Function for scraping houses info from links
-def retreive_house_info(url):
+def retrieve_house_info(url):
     # Fetch the page content using requests
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
@@ -293,91 +280,67 @@ def retreive_house_info(url):
 
 # Function to make it faster with threading
 def scraping_house():
-    apartement_data = []
-    url = retreive_house_links()
+    house_data = []
+    url = retrieve_house_links()
     
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_url = {executor.submit(retreive_house_info, link): link for link in url}
+        future_to_url = {executor.submit(retrieve_house_info, link): link for link in url}
         for future in concurrent.futures.as_completed(future_to_url):
             try:
                 data = future.result()
-                apartement_data.append(data)
+                if data:  # Ensure data is not None
+                    house_data.append(data)
             except Exception as exc:
                 print(f'Generated an exception: {exc}')
     
-    return apartement_data
+    return house_data
+
+# Function to save the data in a csv file apartment
+def save_csv_apartment(classified_dict):
+    # Filter out None entries if they exist
+    classified_dict = [entry for entry in classified_dict if entry is not None]
+    
+    if classified_dict:  # Ensure there is data to save
+        df = pd.DataFrame(classified_dict)
+        df.to_csv("datasets/data_immo_eliza_apartment.csv", index=False)
+        print("Data saved as data_immo_eliza_apartment.csv")
+    else:
+        print("No valid data to save.")
+    return "data_immo_eliza_apartment.csv"
 
 # Function to save the data in a csv file houses
 def save_csv_house(classified_dict):
-    df = pd.DataFrame(
-        classified_dict
-    )  # Convert the list of dictionaries into a DataFrame
-    df.to_csv("data_immo_eliza_house.csv", index=False)
-    print("Data saved as data_immo_eliza_house.csv")
+    # Filter out None entries if they exist
+    classified_dict = [entry for entry in classified_dict if entry is not None]
+    
+    if classified_dict:  # Ensure there is data to save
+        df = pd.DataFrame(classified_dict)
+        df.to_csv("datasets/data_immo_eliza_house.csv", index=False)
+        print("Data saved as data_immo_eliza_house.csv")
+    else:
+        print("No valid data to save.")
     return "data_immo_eliza_house.csv"
 
+# Function to concatenate the 2 csv files
+def save_all_data_to_csv():
+    df1 = pd.read_csv('datasets/data_immo_eliza_apartment.csv')
+    df2 = pd.read_csv('datasets/data_immo_eliza_house.csv')
+    df = pd.concat([df1, df2])
+    df.to_csv('datasets/all_data_immo_eliza.csv', index=False)
+    print("Data concatenated and saved as all_data_immo_eliza.csv")
+    return 'all_data_immo_eliza.csv'
 
-def scraping_apartement_main():
+def scraping_apartment_main():
     data_apartment = scraping_apartment()
-    save_csv_apartement(data_apartment)
-
+    save_csv_apartment(data_apartment)
 
 def scraping_house_main():
     data_house = scraping_house()
     save_csv_house(data_house)
 
-# Function to concatonate the 2 csv files
-
-def save_all_data_to_csv():
-    df1 = pd.read_csv('data_immo_eliza_apartment.csv')
-    df2 = pd.read_csv('data_immo_eliza_house.csv')
-    df = pd.concat([df1, df2])
-    df.to_csv('all_data_immo_eliza.csv', index=False)
-    print("Data concatonated and saved as all_data_immo_eliza.csv")
-    return 'all_data_immo_eliza.csv'
-
-
 def main():
-    scraping_apartement_main()
+    scraping_apartment_main()
     scraping_house_main()
     save_all_data_to_csv()
 
-
 main()
-
-
-
-
-# Defining the DAG
-
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False
-}
-
-dag = DAG(
-    'scraping_dag',
-    default_args=default_args,
-    description='A scraping DAG',
-    schedule='0 18 * * *',
-    start_date=datetime.now()
-)
-
-scraping_house_task = PythonOperator(
-    task_id='scraping_house',
-    python_callable=scraping_house_main,
-    dag=dag
-)
-
-scraping_apartment_task = PythonOperator(
-    task_id='scraping_apartment',
-    python_callable=scraping_apartement_main,
-    dag=dag
-)
-
-saving_data_task = PythonOperator(
-    task_id='saving_data',
-    python_callable=save_all_data_to_csv,
-    dag=dag
-)
-

@@ -144,6 +144,7 @@ def scraping_apartment():
     url = retreive_apartment_links()
     
     with concurrent.futures.ThreadPoolExecutor() as executor:
+
         future_to_url = {executor.submit(retreive_apartment_info, link): link for link in url}
         for future in concurrent.futures.as_completed(future_to_url):
             try:
@@ -182,6 +183,7 @@ def fetch_links_from_page_house(counter):
 def retreive_house_links():
     appartements_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
+
         futures = [executor.submit(fetch_links_from_page_house, counter) for counter in range(1, 2)]        # CHANGE FOR THE NUMBER OF PAGES
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -298,6 +300,7 @@ def scraping_house():
     url = retreive_house_links()
     
     with concurrent.futures.ThreadPoolExecutor() as executor:
+
         future_to_url = {executor.submit(retreive_house_info, link): link for link in url}
         for future in concurrent.futures.as_completed(future_to_url):
             try:
@@ -340,23 +343,29 @@ def save_all_data_to_csv():
 
 # Function to save data to PostgreSQL
 def save_to_postgres():
-    # Read the scraped data
-    df = pd.read_csv("/opt/airflow/all_data_immo_eliza.csv")
+    try:
+        # Read the scraped data with UTF-8 encoding
+        df = pd.read_csv("/opt/airflow/all_data_immo_eliza.csv", encoding="utf-8")
 
+        # Connect to PostgreSQL
+        hook = PostgresHook(postgres_conn_id="postgres_default")
+        engine = hook.get_sqlalchemy_engine()
 
-    # Connect to PostgreSQL
-    hook = PostgresHook(postgres_conn_id="postgres_default")
-    engine = hook.get_sqlalchemy_engine()
+        # Save DataFrame to PostgreSQL
+        df.to_sql("immo_data", engine, if_exists="append", index=False)
+        print("Data successfully saved to PostgreSQL.")
 
-    # Save DataFrame to PostgreSQL
-    df.to_sql("immo_data", engine, if_exists="append", index=False)
+    except Exception as e:
+        print(f"Error occurred: {e}")
 
 
 # Defining the DAG
 
 default_args = {
     'owner': 'airflow',
-    'depends_on_past': False
+    'depends_on_past': False,
+    'retries': 3,
+    'retry_delay': datetime.timedelta(minutes=5),
 }
 
 dag = DAG(
@@ -393,5 +402,5 @@ save_data_postgres_task = PythonOperator(
 
 # Setting the order of the tasks
 
-[scraping_house_task, scraping_apartment_task] >> saving_data_task >> save_data_postgres_task
+scraping_house_task >> scraping_apartment_task >> saving_data_task >> save_data_postgres_task
 

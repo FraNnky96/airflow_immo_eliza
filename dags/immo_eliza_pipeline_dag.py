@@ -9,6 +9,10 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 import pandas as pd
 import datetime
+from catboost import CatBoostRegressor
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import mean_absolute_error
+import joblib
 
 # Defining functions
 
@@ -160,7 +164,7 @@ def save_csv_apartement(classified_dict):
     df = pd.DataFrame(
         classified_dict
     )  # Convert the list of dictionaries into a DataFrame
-    df.to_csv("data_immo_eliza_apartment.csv", index=False)
+    df.to_csv("/opt/airflow/datasets/data_immo_eliza_apartment.csv", index=False)
     print("Data saved as data_immo_eliza_apartment.csv")
     return "data_immo_eliza_apartment.csv"
 
@@ -316,7 +320,7 @@ def save_csv_house(classified_dict):
     df = pd.DataFrame(
         classified_dict
     )  # Convert the list of dictionaries into a DataFrame
-    df.to_csv("data_immo_eliza_house.csv", index=False)
+    df.to_csv("/opt/airflow/datasets/data_immo_eliza_house.csv", index=False)
     print("Data saved as data_immo_eliza_house.csv")
     return "data_immo_eliza_house.csv"
 
@@ -333,16 +337,16 @@ def scraping_house_main():
 # Function to concatonate the 2 csv files
 
 def save_all_data_to_csv():
-    df1 = pd.read_csv('data_immo_eliza_apartment.csv')
-    df2 = pd.read_csv('data_immo_eliza_house.csv')
+    df1 = pd.read_csv('/opt/airflow/datasets/data_immo_eliza_apartment.csv')
+    df2 = pd.read_csv('/opt/airflow/datasets/data_immo_eliza_house.csv')
     df = pd.concat([df1, df2])
-    df.to_csv('all_data_immo_eliza.csv', index=False)
+    df.to_csv('/opt/airflow/datasets/all_data_immo_eliza.csv', index=False)
     print("Data concatonated and saved as all_data_immo_eliza.csv")
     return 'all_data_immo_eliza.csv'
 
 
-# Function to save data to PostgreSQL
-def save_to_postgres():
+# Function to save data to PostgreSQL ( Not working yet)
+"""def save_to_postgres():
     try:
         # Read the scraped data with UTF-8 encoding
         df = pd.read_csv("/opt/airflow/all_data_immo_eliza.csv", encoding="utf-8")
@@ -356,8 +360,92 @@ def save_to_postgres():
         print("Data successfully saved to PostgreSQL.")
 
     except Exception as e:
-        print(f"Error occurred: {e}")
+        print(f"Error occurred: {e}")"""
 
+# Function to clean the data
+def drop_duplicate_data():
+    df = pd.read_csv('/opt/airflow/datasets/all_data_immo_eliza.csv')
+    no_duplicate_df = df.drop_duplicates()
+    return no_duplicate_df
+
+def clean_data():
+    df = drop_duplicate_data()
+    df = df.dropna(subset=['Price', 'Area', 'Bedrooms'])
+    
+    # Remove rows where 'Postalcode' contains any letters
+    if df['Postcode'].dtype != 'object':
+        df['Postcode'] = df['Postcode'].astype(str)
+    df = df[~df['Postcode'].str.contains('[A-Za-z]', na=False)]
+    
+    # Define a dictionary with column names as keys and tuples of fill values and data types as values
+    fill_values = {
+        'Fireplace': (0, int),
+        'Swimmingpool': (0, int),
+        'Furnished': (0, int),
+        'Terrace': (0, int),
+        'Terrace_Surface': (0, float),
+        'Garden': (0, int),
+        'Garden_surface': (0, float),
+        'Kitchen': ('NO_INFO', str),
+        'Frontages': (0, float),
+        'State_of_building': ('NO_INFO', str),
+        'Plot_surface': (0, float),
+        'Cadastral_income': (0, float),
+    }
+    
+    # Loop through the dictionary and apply fillna and astype operations
+    for column, (fill_value, dtype) in fill_values.items():
+        if column in df.columns:
+            df[column] = df[column].fillna(fill_value).astype(dtype)
+    
+    print(df.isna().sum())
+    print(df.shape)
+    # Save the cleaned DataFrame to a new CSV file
+    df.to_csv('/opt/airflow/datasets/cleaned_data.csv', index=False)
+
+
+# Function for model
+
+def model():
+    # Load the dataset
+    df = pd.read_csv('/opt/airflow/datasets/cleaned_data.csv')
+    
+    # Identify categorical columns
+    cat_cols = ['Type', 'Subtype', 'Kitchen', 'Type_of_sale', 'State_of_building']
+    
+    # Handle missing values: 
+    for col in cat_cols:
+        df[col] = df[col].astype(str).fillna('Unknown')  # Fill categorical NaN with 'Unknown'
+    
+    df.fillna(df.mean(numeric_only=True), inplace=True)  # Fill numeric NaN with column mean
+    
+    # Define the features and target variable
+    X = df.drop(columns=['Price'])
+    y = df['Price']
+    
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Define the CatBoost model (passing categorical features correctly)
+    model = CatBoostRegressor(random_state=42, verbose=100)
+    
+    # Define the model with the best parameters
+    best_params = {'depth': 8, 'iterations': 300, 'learning_rate': 0.1}
+    model = CatBoostRegressor(**best_params)
+
+    # Fit the model
+    model.fit(X_train, y_train, cat_features=cat_cols)
+
+    # Make predictions
+    y_pred = model.predict(X_test)
+
+    # Evaluate the model
+    mae = mean_absolute_error(y_test, y_pred)
+    print(f'Mean Absolute Error: {mae}')
+
+    # Save the model
+    joblib.dump(model, 'model.pkl')
+    print('Model saved as model.pkl')
 
 # Defining the DAG
 
@@ -369,9 +457,9 @@ default_args = {
 }
 
 dag = DAG(
-    'scraping_dag',
+    'immo_eliza_pipeline_dag',
     default_args=default_args,
-    description='A scraping DAG',
+    description='Pipeline for scraping immo eliza data',
     schedule='0 23 * * * *',
     start_date=datetime.datetime(2024, 2, 4),
 )
@@ -393,14 +481,26 @@ saving_data_task = PythonOperator(
     python_callable=save_all_data_to_csv,
     dag=dag
 )
-
-save_data_postgres_task = PythonOperator(
+# Not working
+"""save_data_postgres_task = PythonOperator(
     task_id="saving_data_postgres",
     python_callable=save_to_postgres,
+    dag=dag
+)"""
+
+clean_data_task = PythonOperator(
+    task_id='clean_data',
+    python_callable=clean_data,
+    dag=dag
+)
+
+model_task = PythonOperator(
+    task_id='model',
+    python_callable=model,
     dag=dag
 )
 
 # Setting the order of the tasks
 
-scraping_house_task >> scraping_apartment_task >> saving_data_task >> save_data_postgres_task
+scraping_house_task >> scraping_apartment_task >> saving_data_task >> clean_data_task >> model_task
 

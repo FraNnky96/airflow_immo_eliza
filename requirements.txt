@@ -1,8 +1,8 @@
-apache-airflow
+apache-airflow==2.6.3
 requests
 beautifulsoup4
-re
-json
 pandas
 psycopg2-binary
-
+scikit-learn
+catboost
+joblib

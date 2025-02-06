@@ -9,7 +9,11 @@ def drop_duplicate_data():
 
 def clean_data():
     df = drop_duplicate_data()
-    df = df.dropna(subset=['Price','Area','Bedrooms'])
+    df = df.dropna(subset=['Price', 'Area', 'Bedrooms'])
+    
+    # Remove rows where 'Postalcode' contains any letters
+    df = df[~df['Postcode'].str.contains('[A-Za-z]', na=False)]
+    
     # Define a dictionary with column names as keys and tuples of fill values and data types as values
     fill_values = {
         'Fireplace': (0, int),
@@ -36,4 +40,6 @@ def clean_data():
     # Save the cleaned DataFrame to a new CSV file
     df.to_csv('datasets/cleaned_data.csv', index=False)
 
-clean_data()
+
+
+

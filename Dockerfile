@@ -12,13 +12,3 @@ RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt
 COPY dags /opt/airflow/dags
 COPY scripts /opt/airflow/scripts
 COPY datasets /opt/airflow/datasets
-
-
-
-
-
-
-
-
-
-

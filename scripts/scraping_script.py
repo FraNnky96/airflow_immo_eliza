@@ -11,29 +11,38 @@ import pandas as pd
 
 # Functions for scraping appartments
 
+
 def fetch_links_from_page_apartment(counter):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
     }
-    url = f'https://www.immoweb.be/en/search/apartment/for-sale?countries=BE&page={counter}'
+    url = f"https://www.immoweb.be/en/search/apartment/for-sale?countries=BE&page={counter}"
     print(url)
     r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.content, 'html.parser')
-    page_links = [elem['href'] for elem in soup.find_all('a', href=True) if 'classified/apartment/' in elem['href']]
+    soup = BeautifulSoup(r.content, "html.parser")
+    page_links = [
+        elem["href"]
+        for elem in soup.find_all("a", href=True)
+        if "classified/apartment/" in elem["href"]
+    ]
     return page_links
+
 
 # Retreive links of all the appartments from a page
 def retreive_apartment_links():
     appartements_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(fetch_links_from_page_apartment, counter) for counter in range(1, 2)]        # CHANGE FOR THE NUMBER OF PAGES
+        futures = [
+            executor.submit(fetch_links_from_page_apartment, counter)
+            for counter in range(1, 2)
+        ]  # CHANGE FOR THE NUMBER OF PAGES
         for future in concurrent.futures.as_completed(futures):
             try:
                 page_links = future.result()
                 appartements_url.extend(page_links)
             except Exception as exc:
-                print(f'Generated an exception: {exc}')
-    
+                print(f"Generated an exception: {exc}")
+
     return appartements_url
 
 
@@ -135,22 +144,27 @@ def retreive_apartment_info(url):
         data_dict, "property", "land", "surface"
     )
     return classified_dict
+
+
 # Function to make it faster with threading
 def scraping_apartment():
     apartement_data = []
     url = retreive_apartment_links()
-    
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
 
-        future_to_url = {executor.submit(retreive_apartment_info, link): link for link in url}
+        future_to_url = {
+            executor.submit(retreive_apartment_info, link): link for link in url
+        }
         for future in concurrent.futures.as_completed(future_to_url):
             try:
                 data = future.result()
                 apartement_data.append(data)
             except Exception as exc:
-                print(f'Generated an exception: {exc}')
-    
+                print(f"Generated an exception: {exc}")
+
     return apartement_data
+
 
 # Function to save the data in a csv file apartment
 def save_csv_apartement(classified_dict):
@@ -164,31 +178,40 @@ def save_csv_apartement(classified_dict):
 
 # Functions to scrape houses
 
+
 # Functions for retreiving links for houses
 def fetch_links_from_page_house(counter):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
     }
-    url = f'https://www.immoweb.be/en/search/house/for-sale?countries=BE&page={counter}'
+    url = f"https://www.immoweb.be/en/search/house/for-sale?countries=BE&page={counter}"
     print(url)
     r = requests.get(url, headers=headers)
-    soup = BeautifulSoup(r.content, 'html.parser')
-    page_links = [elem['href'] for elem in soup.find_all('a', href=True) if 'classified/house/' in elem['href']]
+    soup = BeautifulSoup(r.content, "html.parser")
+    page_links = [
+        elem["href"]
+        for elem in soup.find_all("a", href=True)
+        if "classified/house/" in elem["href"]
+    ]
     return page_links
+
 
 # Retreive links of all the houses from a page
 def retreive_house_links():
     appartements_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
 
-        futures = [executor.submit(fetch_links_from_page_house, counter) for counter in range(1, 2)]        # CHANGE FOR THE NUMBER OF PAGES
+        futures = [
+            executor.submit(fetch_links_from_page_house, counter)
+            for counter in range(1, 2)
+        ]  # CHANGE FOR THE NUMBER OF PAGES
         for future in concurrent.futures.as_completed(futures):
             try:
                 page_links = future.result()
                 appartements_url.extend(page_links)
             except Exception as exc:
-                print(f'Generated an exception: {exc}')
-    
+                print(f"Generated an exception: {exc}")
+
     return appartements_url
 
 
@@ -291,22 +314,26 @@ def retreive_house_info(url):
     )
     return classified_dict
 
+
 # Function to make it faster with threading
 def scraping_house():
     apartement_data = []
     url = retreive_house_links()
-    
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
 
-        future_to_url = {executor.submit(retreive_house_info, link): link for link in url}
+        future_to_url = {
+            executor.submit(retreive_house_info, link): link for link in url
+        }
         for future in concurrent.futures.as_completed(future_to_url):
             try:
                 data = future.result()
                 apartement_data.append(data)
             except Exception as exc:
-                print(f'Generated an exception: {exc}')
-    
+                print(f"Generated an exception: {exc}")
+
     return apartement_data
+
 
 # Function to save the data in a csv file houses
 def save_csv_house(classified_dict):
@@ -327,15 +354,18 @@ def scraping_house_main():
     data_house = scraping_house()
     save_csv_house(data_house)
 
+
 # Function to concatonate the 2 csv files
 
+
 def save_all_data_to_csv():
-    df1 = pd.read_csv('data_immo_eliza_apartment.csv')
-    df2 = pd.read_csv('data_immo_eliza_house.csv')
+    df1 = pd.read_csv("data_immo_eliza_apartment.csv")
+    df2 = pd.read_csv("data_immo_eliza_house.csv")
     df = pd.concat([df1, df2])
-    df.to_csv('all_data_immo_eliza.csv', index=False)
+    df.to_csv("all_data_immo_eliza.csv", index=False)
     print("Data concatonated and saved as all_data_immo_eliza.csv")
-    return 'all_data_immo_eliza.csv'
+    return "all_data_immo_eliza.csv"
+
 
 # Not working yet
 """# Function to save data to PostgreSQL
@@ -354,4 +384,3 @@ def save_to_postgres():
 
     except Exception as e:
         print(f"Error occurred: {e}")"""
-

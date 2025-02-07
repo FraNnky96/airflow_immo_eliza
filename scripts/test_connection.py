@@ -1,31 +1,32 @@
 import psycopg2
 
+
 def fetch_data():
     try:
         print("Attempting to connect...")
         # Establish the connection
         conn = psycopg2.connect(
-            user='airflow',
-            password='airflow',
-            database='airflow',
-            host='localhost',  # Connect to the host where PostgreSQL is exposed
-            port=5432
+            user="airflow",
+            password="airflow",
+            database="airflow",
+            host="localhost",  # Connect to the host where PostgreSQL is exposed
+            port=5432,
         )
 
         # Manually set client encoding after connection
-        conn.set_client_encoding('UTF8')
+        conn.set_client_encoding("UTF8")
 
         print("Connection established")
-        
+
         # Create a cursor
         cursor = conn.cursor()
 
         # Execute the query
-        cursor.execute('SELECT * FROM immo_data LIMIT 5')
-        
+        cursor.execute("SELECT * FROM immo_data LIMIT 5")
+
         # Fetch the data
         result = cursor.fetchall()
-        
+
         print("Fetched data:")
         try:
             for row in result:
@@ -43,25 +44,7 @@ def fetch_data():
     except Exception as e:
         print(f"Error: {e}")
 
+
 # Run the function
 if __name__ == "__main__":
     fetch_data()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

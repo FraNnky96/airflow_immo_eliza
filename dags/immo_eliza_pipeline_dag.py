@@ -6,21 +6,22 @@ import json
 import concurrent.futures
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
 import pandas as pd
 import datetime
 from catboost import CatBoostRegressor
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 import joblib
-import os
 
 # Defining functions
 
-# Functions for scraping appartments
-
 
 def fetch_links_from_page_apartment(counter):
+    """
+    fetch_links_from_page_apartment: Function to fetch the links of the apartments from the main page
+    counter: int: The page number
+    return: list: The list of links of the apartments
+    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
     }
@@ -36,8 +37,12 @@ def fetch_links_from_page_apartment(counter):
     return page_links
 
 
-# Retreive links of all the appartments from a page
 def retreive_apartment_links():
+    """
+    retreive_apartment_links: Threaded function to fetch the links of the apartments from the main page for fast scraping
+    change the range in the function to get more pages
+    return: list: The list of links of the apartments
+    """
     appartements_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [
@@ -54,9 +59,12 @@ def retreive_apartment_links():
     return appartements_url
 
 
-# Function for scraping apartment info from links
 def retreive_apartment_info(url):
-    # Initialize data_dict as None to avoid reference errors
+    """
+    retrieve_apartment_info: Function to fetch the information of the apartments from the links
+    url: str: The link of the apartment
+    return: dict: The dictionary containing the information of the apartment
+    """
     data_dict = None
 
     # Fetch the page content using requests
@@ -101,7 +109,12 @@ def retreive_apartment_info(url):
 
     # Extract the relevant fields and handle missing data
     def get_nested_value(data, *keys):
-        """Safe access to nested values in the dictionary."""
+        """
+        get_nested_value: Function to get the nested value from the dictionary in each page
+        data: dict: The dictionary containing the data
+        keys: tuple: The keys to get the nested value
+        return: dict: The dictionary containing the information of the apartment
+        """
         for key in keys:
             if isinstance(data, dict):
                 data = data.get(key, {})
@@ -110,39 +123,71 @@ def retreive_apartment_info(url):
         return data if data else None
 
     # Using get_nested_value for safe data extraction
-    classified_dict["Postcode"] = get_nested_value(data_dict, "property", "location", "postalCode")
+    classified_dict["Postcode"] = get_nested_value(
+        data_dict, "property", "location", "postalCode"
+    )
     classified_dict["Type"] = get_nested_value(data_dict, "property", "type")
     classified_dict["Subtype"] = get_nested_value(data_dict, "property", "subtype")
     classified_dict["Price"] = get_nested_value(data_dict, "price", "mainValue")
-    classified_dict["Bedrooms"] = get_nested_value(data_dict, "property", "bedroomCount")
-    classified_dict["Area"] = get_nested_value(data_dict, "property", "netHabitableSurface")
-    classified_dict["Kitchen"] = get_nested_value(data_dict, "property", "kitchen", "type")
-    classified_dict["Fireplace"] = get_nested_value(data_dict, "property", "fireplaceExists")
-    classified_dict["Frontages"] = get_nested_value(data_dict, "property", "building", "facadeCount")
+    classified_dict["Bedrooms"] = get_nested_value(
+        data_dict, "property", "bedroomCount"
+    )
+    classified_dict["Area"] = get_nested_value(
+        data_dict, "property", "netHabitableSurface"
+    )
+    classified_dict["Kitchen"] = get_nested_value(
+        data_dict, "property", "kitchen", "type"
+    )
+    classified_dict["Fireplace"] = get_nested_value(
+        data_dict, "property", "fireplaceExists"
+    )
+    classified_dict["Frontages"] = get_nested_value(
+        data_dict, "property", "building", "facadeCount"
+    )
     classified_dict["Garden"] = get_nested_value(data_dict, "property", "hasGarden")
-    classified_dict["Garden_surface"] = get_nested_value(data_dict, "property", "gardenSurface")
+    classified_dict["Garden_surface"] = get_nested_value(
+        data_dict, "property", "gardenSurface"
+    )
     classified_dict["Terrace"] = get_nested_value(data_dict, "property", "hasTerrace")
-    classified_dict["Terrace_Surface"] = get_nested_value(data_dict, "property", "terraceSurface")
-    classified_dict["Furnished"] = get_nested_value(data_dict, "transaction", "sale", "isFurnished")
-    classified_dict["Type_of_sale"] = get_nested_value(data_dict, "transaction", "subtype")
-    classified_dict["State_of_building"] = get_nested_value(data_dict, "property", "building", "condition")
-    classified_dict["Swimmingpool"] = get_nested_value(data_dict, "property", "hasSwimmingPool")
+    classified_dict["Terrace_Surface"] = get_nested_value(
+        data_dict, "property", "terraceSurface"
+    )
+    classified_dict["Furnished"] = get_nested_value(
+        data_dict, "transaction", "sale", "isFurnished"
+    )
+    classified_dict["Type_of_sale"] = get_nested_value(
+        data_dict, "transaction", "subtype"
+    )
+    classified_dict["State_of_building"] = get_nested_value(
+        data_dict, "property", "building", "condition"
+    )
+    classified_dict["Swimmingpool"] = get_nested_value(
+        data_dict, "property", "hasSwimmingPool"
+    )
     classified_dict["ID IMMOWEB"] = get_nested_value(data_dict, "id")
-    classified_dict["Cadastral_income"] = get_nested_value(data_dict, "transaction", "sale", "cadastralIncome")
-    classified_dict["Plot_surface"] = get_nested_value(data_dict, "property", "land", "surface")
+    classified_dict["Cadastral_income"] = get_nested_value(
+        data_dict, "transaction", "sale", "cadastralIncome"
+    )
+    classified_dict["Plot_surface"] = get_nested_value(
+        data_dict, "property", "land", "surface"
+    )
 
     return classified_dict
 
 
-
-# Function to make it faster with threading
 def scraping_apartment():
+    """
+    scraping_apartment: Function to scrape the information of the apartments
+    return: list: The list of dictionaries containing the information of the apartments
+    """
     apartement_data = []
     url = retreive_apartment_links()
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_url = {executor.submit(retreive_apartment_info, link): link for link in url}
-        
+        future_to_url = {
+            executor.submit(retreive_apartment_info, link): link for link in url
+        }
+
         for future in concurrent.futures.as_completed(future_to_url):
             try:
                 data = future.result()
@@ -154,24 +199,31 @@ def scraping_apartment():
     return apartement_data
 
 
-# Function to save the data in a csv file apartment
 def save_csv_apartement(classified_dict):
+    """
+    save_csv_apartement: Function to save the data in a csv file
+    classified_dict: list: The list of dictionaries containing the information of the apartments
+    return: str: The name of the csv file
+    """
 
     df = pd.DataFrame(classified_dict)
 
-
     df.to_csv(
         "/opt/airflow/datasets/data_immo_eliza_apartment.csv",
-        mode='a',
+        mode="a",
         index=False,
-        header=1
+        header=1,
     )
     print("Data saved as data_immo_eliza_apartment.csv")
     return "data_immo_eliza_apartment.csv"
 
 
-# Functions for retreiving links for houses
 def fetch_links_from_page_house(counter):
+    """
+    fetch_links_from_page_house: Function to fetch the links of the houses from the main page
+    counter: int: The page number
+    return: list: The list of links of the houses
+    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
     }
@@ -187,8 +239,12 @@ def fetch_links_from_page_house(counter):
     return page_links
 
 
-# Retreive links of all the houses from a page
 def retreive_house_links():
+    """
+    retrieve_house_links: Threaded function to fetch the links of the houses from the main page for fast scraping
+    change the range in the function to get more pages
+    return: list: The list of links of the houses
+    """
     appartements_url = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
 
@@ -206,9 +262,13 @@ def retreive_house_links():
     return appartements_url
 
 
-# Function for scraping houses info from links
 def retreive_house_info(url):
-    # Fetch the page content using requests
+    """
+    retrieve_house_info: Function to fetch the information of the houses from the links
+    url: str: The link of the house
+    return: dict: The dictionary containing the information of the house
+    """
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     }
@@ -306,8 +366,11 @@ def retreive_house_info(url):
     return classified_dict
 
 
-# Function to make it faster with threading
 def scraping_house():
+    """
+    scraping_house: Function to scrape the information of the houses
+    return: list: The list of dictionaries containing the information of the houses
+    """
     apartement_data = []
     url = retreive_house_links()
 
@@ -326,39 +389,58 @@ def scraping_house():
     return apartement_data
 
 
-# Function to save the data in a csv file houses
 def save_csv_house(classified_dict):
+    """
+    save_csv_house: Function to save the data in a csv file
+    classified_dict: list: The list of dictionaries containing the information of the houses
+    return: str: The name of the csv file
+    """
     df = pd.DataFrame(
         classified_dict
     )  # Convert the list of dictionaries into a DataFrame
-    df.to_csv("/opt/airflow/datasets/data_immo_eliza_house.csv",mode='a', index=False,header=1)
+    df.to_csv(
+        "/opt/airflow/datasets/data_immo_eliza_house.csv",
+        mode="a",
+        index=False,
+        header=1,
+    )
     print("Data saved as data_immo_eliza_house.csv")
     return "data_immo_eliza_house.csv"
 
 
 def scraping_apartement_main():
+    """
+    scraping_apartement_main: Function to call the scraping_apartment and save_csv_apartement functions
+    """
     data_apartment = scraping_apartment()
     save_csv_apartement(data_apartment)
 
 
 def scraping_house_main():
+    """
+    scraping_house_main: Function to call the scraping_house and save_csv_house functions
+    """
     data_house = scraping_house()
     save_csv_house(data_house)
 
 
-# Function to concatonate the 2 csv files
-
-
 def save_all_data_to_csv():
+    """
+    save_all_data_to_csv: Function to save all the data in a single csv file
+    return: str: The name of the csv file
+    """
+
     df1 = pd.read_csv("/opt/airflow/datasets/data_immo_eliza_apartment.csv")
     df2 = pd.read_csv("/opt/airflow/datasets/data_immo_eliza_house.csv")
     df = pd.concat([df1, df2])
-    df.to_csv("/opt/airflow/datasets/all_data_immo_eliza.csv",mode='a', index=False,header=1)
+    df.to_csv(
+        "/opt/airflow/datasets/all_data_immo_eliza.csv", mode="a", index=False, header=1
+    )
     print("Data concatonated and saved as all_data_immo_eliza.csv")
     return "all_data_immo_eliza.csv"
 
 
-# Function to save data to PostgreSQL ( Not working yet)
+# Not working yet
 """def save_to_postgres():
     try:
         # Read the scraped data with UTF-8 encoding
@@ -376,17 +458,24 @@ def save_all_data_to_csv():
         print(f"Error occurred: {e}")"""
 
 
-
 # Function to clean the data
 def drop_duplicate_data():
+    """
+    drop_duplicate_data: Function to drop the duplicate data
+    return: DataFrame: The DataFrame without duplicate data
+    """
     df = pd.read_csv("/opt/airflow/datasets/all_data_immo_eliza.csv")
     # Remove rows where 'Postcode' column has the value 'Postcode'
-    df = df[df['Postcode'] != 'Postcode']
+    df = df[df["Postcode"] != "Postcode"]
     no_duplicate_df = df.drop_duplicates()
     return no_duplicate_df
 
 
 def clean_data():
+    """
+    clean_data: Function to clean the data and save it in a new csv file in a basic cleaning
+    return: str: The name of the csv file
+    """
     df = drop_duplicate_data()
     df = df.dropna(subset=["Price", "Area", "Bedrooms"])
 
@@ -415,26 +504,31 @@ def clean_data():
         if column in df.columns:
             # Handle boolean-like values in integer fields
             if dtype == int:
-                df[column] = df[column].replace({'True': 1, 'False': 0, True: 1, False: 0})
-            
+                df[column] = df[column].replace(
+                    {"True": 1, "False": 0, True: 1, False: 0}
+                )
+
             df[column] = df[column].fillna(fill_value).astype(dtype)
 
     print(df.isna().sum())
     print(df.shape)
 
     # Save cleaned data to a new CSV file
-    df = df[df['Postcode'] != 'Postcode']
-    df.to_csv("/opt/airflow/datasets/cleaned_data.csv", mode='a', index=False)
-
+    df = df[df["Postcode"] != "Postcode"]
+    df.to_csv("/opt/airflow/datasets/cleaned_data.csv", mode="a", index=False)
 
 
 # Function for model
 
 
 def model():
+    """
+    model: Function to fit the model and save it
+    return: str: The name of the model
+    """
     # Load the dataset
     df = pd.read_csv("/opt/airflow/datasets/cleaned_data.csv")
-    df = df[df['Postcode'] != 'Postcode']
+    df = df[df["Postcode"] != "Postcode"]
 
     # Identify categorical columns
     cat_cols = ["Type", "Subtype", "Kitchen", "Type_of_sale", "State_of_building"]
